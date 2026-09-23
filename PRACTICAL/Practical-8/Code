@@ -1,0 +1,86 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void)
+{
+    printf("========================================\n");
+    printf(" Dynamic Memory Allocation Demo\n");
+    printf("========================================\n\n");
+
+    /* malloc() */
+    printf("1. Allocating memory using malloc()...\n");
+
+    int *a = malloc(5 * sizeof(int));
+
+    if (a == NULL) {
+        printf("malloc failed!\n");
+        return 1;
+    }
+
+    for (int i = 0; i < 5; i++) {
+        a[i] = (i + 1) * 10;
+    }
+
+    printf("malloc values: ");
+
+    for (int i = 0; i < 5; i++) {
+        printf("%d ", a[i]);
+    }
+
+    printf("\n\n");
+
+    /* calloc() */
+    printf("2. Allocating memory using calloc()...\n");
+
+    int *b = calloc(5, sizeof(int));
+
+    if (b == NULL) {
+        printf("calloc failed!\n");
+        free(a);
+        return 1;
+    }
+
+    printf("calloc values: ");
+
+    for (int i = 0; i < 5; i++) {
+        printf("%d ", b[i]);
+    }
+
+    printf("\n\n");
+
+    /* realloc() */
+    printf("3. Resizing malloc memory using realloc()...\n");
+
+    int *temp = realloc(a, 10 * sizeof(int));
+
+    if (temp == NULL) {
+        printf("realloc failed!\n");
+        free(a);
+        free(b);
+        return 1;
+    }
+
+    a = temp;
+
+    for (int i = 5; i < 10; i++) {
+        a[i] = (i + 1) * 10;
+    }
+
+    printf("After realloc: ");
+
+    for (int i = 0; i < 10; i++) {
+        printf("%d ", a[i]);
+    }
+
+    printf("\n\n");
+
+    /* free() */
+    printf("4. Releasing memory using free()...\n");
+
+    free(a);
+    free(b);
+
+    printf("Memory released successfully.\n");
+
+    return 0;
+}
