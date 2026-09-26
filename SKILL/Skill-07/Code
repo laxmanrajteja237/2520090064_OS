@@ -1,0 +1,282 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+#define MAX_PATHS 200
+#define MAX_LENGTH 1024
+
+/* --------------------------------------------------
+   Check whether a file is executable
+   -------------------------------------------------- */
+
+int is_executable(char *path) {
+
+    struct stat file_info;
+
+    /* Check whether file exists */
+    if (stat(path, &file_info) != 0) {
+        return 0;
+    }
+
+    /* Check regular file */
+    if (!S_ISREG(file_info.st_mode)) {
+        return 0;
+    }
+
+    /* Check execute permission */
+    if (access(path, X_OK) == 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
+/* --------------------------------------------------
+   Search command in PATH
+   -------------------------------------------------- */
+
+int find_executable(char *command, char *result) {
+
+    char *path;
+    char *path_copy;
+    char *directory;
+
+    /* If command contains /, check directly */
+    if (strchr(command, '/') != NULL) {
+
+        if (is_executable(command)) {
+            strcpy(result, command);
+            return 1;
+        }
+
+        return 0;
+    }
+
+    /* Get PATH variable */
+    path = getenv("PATH");
+
+    if (path == NULL) {
+        printf("PATH variable is not set.\n");
+        return 0;
+    }
+
+    /* Make a copy because strtok modifies the string */
+    path_copy = strdup(path);
+
+    if (path_copy == NULL) {
+        perror("strdup");
+        return 0;
+    }
+
+    /* Parse PATH directories */
+    directory = strtok(path_copy, ":");
+
+    while (directory != NULL) {
+
+        char full_path[MAX_LENGTH];
+
+        snprintf(full_path,
+                 sizeof(full_path),
+                 "%s/%s",
+                 directory,
+                 command);
+
+        /* Check executable */
+        if (is_executable(full_path)) {
+
+            strcpy(result, full_path);
+
+            free(path_copy);
+
+            return 1;
+        }
+
+        directory = strtok(NULL, ":");
+    }
+
+    free(path_copy);
+
+    return 0;
+}
+
+/* --------------------------------------------------
+   Display PATH directories
+   -------------------------------------------------- */
+
+void display_path() {
+
+    char *path;
+    char *path_copy;
+    char *directory;
+    int count = 1;
+
+    path = getenv("PATH");
+
+    if (path == NULL) {
+        printf("PATH variable not found.\n");
+        return;
+    }
+
+    printf("\n========== PATH DIRECTORIES ==========\n");
+
+    path_copy = strdup(path);
+
+    if (path_copy == NULL) {
+        perror("strdup");
+        return;
+    }
+
+    directory = strtok(path_copy, ":");
+
+    while (directory != NULL) {
+
+        printf("%d. %s\n", count, directory);
+
+        count++;
+
+        directory = strtok(NULL, ":");
+    }
+
+    free(path_copy);
+}
+
+/* --------------------------------------------------
+   Execute command using child process
+   -------------------------------------------------- */
+
+void execute_command(char *command) {
+
+    char executable[MAX_LENGTH];
+
+    printf("\n========== COMMAND RESOLUTION ==========\n");
+
+    /* Find executable */
+    if (!find_executable(command, executable)) {
+
+        printf("Command '%s' not found in PATH.\n",
+               command);
+
+        return;
+    }
+
+    printf("Command      : %s\n", command);
+    printf("Executable   : %s\n", executable);
+
+    printf("\n========== PROCESS CREATION ==========\n");
+
+    pid_t pid = fork();
+
+    /* Fork error */
+    if (pid < 0) {
+
+        perror("fork");
+        return;
+    }
+
+    /* Child process */
+    if (pid == 0) {
+
+        printf("Child process started.\n");
+        printf("Child PID  : %d\n", getpid());
+        printf("Parent PID : %d\n", getppid());
+
+        printf("Executing: %s\n\n", executable);
+
+        execl(executable,
+              command,
+              (char *)NULL);
+
+        /* Only reached if execl fails */
+        perror("exec failed");
+
+        exit(EXIT_FAILURE);
+    }
+
+    /* Parent process */
+    else {
+
+        int status;
+
+        printf("Parent PID : %d\n", getpid());
+        printf("Child PID  : %d\n", pid);
+
+        printf("Parent waiting using waitpid()...\n");
+
+        pid_t result = waitpid(pid, &status, 0);
+
+        if (result == -1) {
+
+            perror("waitpid");
+
+            return;
+        }
+
+        printf("\n========== CHILD STATUS ==========\n");
+
+        if (WIFEXITED(status)) {
+
+            printf("Child exited normally.\n");
+            printf("Exit status: %d\n",
+                   WEXITSTATUS(status));
+        }
+
+        else if (WIFSIGNALED(status)) {
+
+            printf("Child terminated by signal.\n");
+            printf("Signal number: %d\n",
+                   WTERMSIG(status));
+        }
+
+        else if (WIFSTOPPED(status)) {
+
+            printf("Child stopped.\n");
+            printf("Signal number: %d\n",
+                   WSTOPSIG(status));
+        }
+    }
+}
+
+/* --------------------------------------------------
+   Main
+   -------------------------------------------------- */
+
+int main() {
+
+    char command[100];
+
+    printf("=============================================\n");
+    printf(" PATH RESOLUTION & WAITPID DEMONSTRATION\n");
+    printf("=============================================\n");
+
+    /* Display PATH */
+    display_path();
+
+    printf("\nEnter command to search: ");
+
+    if (fgets(command,
+              sizeof(command),
+              stdin) == NULL) {
+
+        printf("Input error.\n");
+        return 1;
+    }
+
+    /* Remove newline */
+    command[strcspn(command, "\n")] = '\0';
+
+    if (strlen(command) == 0) {
+
+        printf("Empty command.\n");
+        return 0;
+    }
+
+    /* Execute command */
+    execute_command(command);
+
+    return 0;
+}
