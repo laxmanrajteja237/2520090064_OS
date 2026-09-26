@@ -1,0 +1,215 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <ctype.h>
+
+#define MAX_INPUT 500
+#define MAX_ARGS 50
+#define MAX_ARG_LEN 100
+
+/* --------------------------------------------------
+   Tokenizer
+   Handles escaped spaces and special characters
+   -------------------------------------------------- */
+
+int tokenize(char *input, char *args[]) {
+
+    int argc = 0;
+    int i = 0;
+
+    while (input[i] != '\0') {
+
+        /* Skip spaces */
+        while (isspace((unsigned char)input[i])) {
+            i++;
+        }
+
+        if (input[i] == '\0') {
+            break;
+        }
+
+        args[argc] = malloc(MAX_ARG_LEN);
+
+        if (args[argc] == NULL) {
+            perror("malloc");
+            exit(1);
+        }
+
+        int j = 0;
+
+        while (input[i] != '\0' &&
+               !isspace((unsigned char)input[i])) {
+
+            /* Handle escape sequence */
+            if (input[i] == '\\') {
+
+                i++;
+
+                if (input[i] != '\0') {
+                    args[argc][j++] = input[i];
+                    i++;
+                }
+            }
+
+            else {
+                args[argc][j++] = input[i];
+                i++;
+            }
+
+            if (j >= MAX_ARG_LEN - 1) {
+                break;
+            }
+        }
+
+        args[argc][j] = '\0';
+
+        argc++;
+
+        if (argc >= MAX_ARGS - 1) {
+            break;
+        }
+    }
+
+    args[argc] = NULL;
+
+    return argc;
+}
+
+/* --------------------------------------------------
+   Display parsed arguments
+   -------------------------------------------------- */
+
+void display_arguments(char *args[], int argc) {
+
+    printf("\n========== PARSER OUTPUT ==========\n");
+
+    if (argc == 0) {
+        printf("No command entered.\n");
+        return;
+    }
+
+    for (int i = 0; i < argc; i++) {
+        printf("Argument %d: [%s]\n", i + 1, args[i]);
+    }
+}
+
+/* --------------------------------------------------
+   Execute command using child process
+   -------------------------------------------------- */
+
+void execute_command(char *args[], int argc) {
+
+    if (argc == 0) {
+        return;
+    }
+
+    printf("\n========== PROCESS CREATION ==========\n");
+
+    pid_t pid = fork();
+
+    /* Fork error */
+    if (pid < 0) {
+        perror("fork failed");
+        return;
+    }
+
+    /* Child process */
+    if (pid == 0) {
+
+        printf("Child Process Created\n");
+        printf("Child PID  : %d\n", getpid());
+        printf("Parent PID : %d\n", getppid());
+
+        printf("\nExecuting command: %s\n", args[0]);
+
+        execvp(args[0], args);
+
+        /* execvp returns only if there is an error */
+        perror("Execution failed");
+
+        exit(1);
+    }
+
+    /* Parent process */
+    else {
+
+        int status;
+
+        printf("Parent PID : %d\n", getpid());
+        printf("Child PID  : %d\n", pid);
+
+        printf("Parent waiting for child...\n");
+
+        waitpid(pid, &status, 0);
+
+        if (WIFEXITED(status)) {
+
+            printf("\nChild exited with status: %d\n",
+                   WEXITSTATUS(status));
+        }
+
+        else if (WIFSIGNALED(status)) {
+
+            printf("\nChild terminated by signal: %d\n",
+                   WTERMSIG(status));
+        }
+    }
+}
+
+/* --------------------------------------------------
+   Main
+   -------------------------------------------------- */
+
+int main() {
+
+    char input[MAX_INPUT];
+
+    char *args[MAX_ARGS];
+
+    printf("=============================================\n");
+    printf("   ESCAPE SEQUENCE & PROCESS EXECUTION\n");
+    printf("=============================================\n");
+
+    printf("\nFeatures:\n");
+    printf("1. Escaped spaces\n");
+    printf("2. Escaped special symbols\n");
+    printf("3. Character preservation\n");
+    printf("4. Token validation\n");
+    printf("5. Child process creation\n");
+    printf("6. Program execution using execvp()\n");
+
+    printf("\nEnter command: ");
+
+    if (fgets(input, sizeof(input), stdin) == NULL) {
+        printf("Input error.\n");
+        return 1;
+    }
+
+    /* Remove newline */
+    input[strcspn(input, "\n")] = '\0';
+
+    /* Empty input */
+    if (strlen(input) == 0) {
+        printf("Empty command.\n");
+        return 0;
+    }
+
+    /* Tokenize input */
+    int argc = tokenize(input, args);
+
+    /* Display parser result */
+    display_arguments(args, argc);
+
+    /* Execute command */
+    execute_command(args, argc);
+
+    /* Free allocated memory */
+    for (int i = 0; i < argc; i++) {
+        free(args[i]);
+    }
+
+    return 0;
+}
