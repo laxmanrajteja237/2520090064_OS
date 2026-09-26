@@ -1,0 +1,255 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_INPUT 500
+#define MAX_TOKENS 100
+#define MAX_TOKEN_LENGTH 100
+
+typedef enum {
+    TOKEN_WORD,
+    TOKEN_PIPE,
+    TOKEN_REDIRECT_IN,
+    TOKEN_REDIRECT_OUT,
+    TOKEN_BACKGROUND
+} TokenType;
+
+typedef struct {
+    TokenType type;
+    char value[MAX_TOKEN_LENGTH];
+} Token;
+
+void print_token_type(TokenType type)
+{
+    switch (type) {
+        case TOKEN_WORD:
+            printf("WORD");
+            break;
+        case TOKEN_PIPE:
+            printf("PIPE");
+            break;
+        case TOKEN_REDIRECT_IN:
+            printf("REDIRECT_IN");
+            break;
+        case TOKEN_REDIRECT_OUT:
+            printf("REDIRECT_OUT");
+            break;
+        case TOKEN_BACKGROUND:
+            printf("BACKGROUND");
+            break;
+    }
+}
+
+int tokenize(char *input, Token tokens[])
+{
+    int count = 0;
+    int i = 0;
+
+    while (input[i] != '\0' && count < MAX_TOKENS) {
+
+        /* Ignore whitespace */
+        if (isspace((unsigned char)input[i])) {
+            i++;
+            continue;
+        }
+
+        /* Pipe */
+        if (input[i] == '|') {
+            tokens[count].type = TOKEN_PIPE;
+            strcpy(tokens[count].value, "|");
+            count++;
+            i++;
+            continue;
+        }
+
+        /* Input redirection */
+        if (input[i] == '<') {
+            tokens[count].type = TOKEN_REDIRECT_IN;
+            strcpy(tokens[count].value, "<");
+            count++;
+            i++;
+            continue;
+        }
+
+        /* Output redirection */
+        if (input[i] == '>') {
+            tokens[count].type = TOKEN_REDIRECT_OUT;
+            strcpy(tokens[count].value, ">");
+            count++;
+            i++;
+            continue;
+        }
+
+        /* Background */
+        if (input[i] == '&') {
+            tokens[count].type = TOKEN_BACKGROUND;
+            strcpy(tokens[count].value, "&");
+            count++;
+            i++;
+            continue;
+        }
+
+        /* Normal word */
+        tokens[count].type = TOKEN_WORD;
+
+        int j = 0;
+
+        while (input[i] != '\0' &&
+               !isspace((unsigned char)input[i]) &&
+               input[i] != '|' &&
+               input[i] != '<' &&
+               input[i] != '>' &&
+               input[i] != '&') {
+
+            if (j < MAX_TOKEN_LENGTH - 1) {
+                tokens[count].value[j++] = input[i];
+            }
+
+            i++;
+        }
+
+        tokens[count].value[j] = '\0';
+        count++;
+    }
+
+    return count;
+}
+
+int validate_tokens(Token tokens[], int count)
+{
+    int i;
+
+    if (count == 0) {
+        printf("Empty command.\n");
+        return 0;
+    }
+
+    /* Command cannot start with a pipe */
+    if (tokens[0].type == TOKEN_PIPE) {
+        printf("Syntax Error: Command cannot start with '|'.\n");
+        return 0;
+    }
+
+    /* Command cannot end with a pipe */
+    if (tokens[count - 1].type == TOKEN_PIPE) {
+        printf("Syntax Error: Command cannot end with '|'.\n");
+        return 0;
+    }
+
+    /* Two pipes cannot be together */
+    for (i = 0; i < count - 1; i++) {
+        if (tokens[i].type == TOKEN_PIPE &&
+            tokens[i + 1].type == TOKEN_PIPE) {
+            printf("Syntax Error: Consecutive pipes are not allowed.\n");
+            return 0;
+        }
+    }
+
+    /* Redirection must have a filename after it */
+    for (i = 0; i < count; i++) {
+        if (tokens[i].type == TOKEN_REDIRECT_IN ||
+            tokens[i].type == TOKEN_REDIRECT_OUT) {
+
+            if (i == count - 1 ||
+                tokens[i + 1].type != TOKEN_WORD) {
+
+                printf("Syntax Error: Redirection requires a filename.\n");
+                return 0;
+            }
+        }
+    }
+
+    printf("Syntax validation successful.\n");
+    return 1;
+}
+
+void display_tokens(Token tokens[], int count)
+{
+    int i;
+
+    printf("\n========== TOKEN STREAM ==========\n");
+
+    for (i = 0; i < count; i++) {
+        printf("Token %d: ", i + 1);
+        print_token_type(tokens[i].type);
+        printf(" -> \"%s\"\n", tokens[i].value);
+    }
+
+    printf("==================================\n");
+}
+
+void create_execution_structure(Token tokens[], int count)
+{
+    int i;
+
+    printf("\n====== EXECUTION STRUCTURE ======\n");
+
+    printf("Command:");
+
+    for (i = 0; i < count; i++) {
+        if (tokens[i].type == TOKEN_WORD) {
+            printf(" %s", tokens[i].value);
+        }
+    }
+
+    printf("\n");
+
+    for (i = 0; i < count; i++) {
+        if (tokens[i].type == TOKEN_PIPE) {
+            printf("Pipeline operator detected: |\n");
+        }
+
+        if (tokens[i].type == TOKEN_REDIRECT_IN) {
+            printf("Input redirection detected: <\n");
+        }
+
+        if (tokens[i].type == TOKEN_REDIRECT_OUT) {
+            printf("Output redirection detected: >\n");
+        }
+
+        if (tokens[i].type == TOKEN_BACKGROUND) {
+            printf("Background execution detected: &\n");
+        }
+    }
+
+    printf("=================================\n");
+}
+
+int main(void)
+{
+    char input[MAX_INPUT];
+    Token tokens[MAX_TOKENS];
+
+    printf("========================================\n");
+    printf("     COMMAND TOKENIZER AND PARSER\n");
+    printf("========================================\n");
+
+    printf("\nEnter a command: ");
+
+    if (fgets(input, sizeof(input), stdin) == NULL) {
+        return 1;
+    }
+
+    /* Remove newline */
+    input[strcspn(input, "\n")] = '\0';
+
+    int token_count = tokenize(input, tokens);
+
+    if (token_count == 0) {
+        printf("\nEmpty command detected.\n");
+        printf("Nothing to execute.\n");
+        return 0;
+    }
+
+    display_tokens(tokens, token_count);
+
+    if (validate_tokens(tokens, token_count)) {
+        create_execution_structure(tokens, token_count);
+        printf("\nParser completed successfully.\n");
+    } else {
+        printf("\nParser found a syntax error.\n");
+    }
+
+    return 0;
+}
